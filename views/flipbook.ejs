@@ -55,12 +55,6 @@
                 <button class="control-button" id="last">
                     <i class="fas fa-step-forward"></i>
                 </button>
-                <button class="control-button" id="zoomIn">
-                    <i class="fas fa-search-plus"></i>
-                </button>
-                <button class="control-button" id="zoomOut">
-                    <i class="fas fa-search-minus"></i>
-                </button>
             </div>
         </div>
     </div>
@@ -70,7 +64,28 @@
 
         const pdfUrl = '<%= pdfUrl %>';
         let currentScale = 1.0;
-        const desiredWidth = 800; // Ancho base del flipbook
+        const desiredWidth = 600; // Reducido de 800 a 600 para mejor visualización inicial
+
+        function calculateDimensions() {
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            const controlsHeight = 100; // Altura aproximada de la barra de controles
+            const padding = 40; // Padding total (20px de cada lado)
+            
+            // Calcular el ancho máximo disponible considerando el padding
+            let width = Math.min(windowWidth - padding, desiredWidth * 2);
+            
+            // Calcular la altura máxima disponible (restando espacio para controles)
+            let height = Math.min(windowHeight - controlsHeight - padding, width * 0.7);
+            
+            // Ajustar ancho basado en la altura si es necesario
+            width = Math.min(width, height / 0.7);
+            
+            return { 
+                width: Math.floor(width), // Redondear para evitar decimales
+                height: Math.floor(height)
+            };
+        }
 
         async function renderPDF() {
             try {
@@ -80,13 +95,7 @@
                 const flipbook = document.getElementById('flipbook');
                 flipbook.innerHTML = '';
                 
-                // Agregar portada
-                const coverDiv = document.createElement('div');
-                coverDiv.className = 'hard';
-                coverDiv.textContent = 'Portada';
-                flipbook.appendChild(coverDiv);
-                
-                // Renderizar páginas
+                // Renderizar páginas (sin portada ni contraportada)
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     const page = await pdf.getPage(pageNum);
                     const canvas = document.createElement('canvas');
@@ -109,31 +118,67 @@
                     div.appendChild(canvas);
                     flipbook.appendChild(div);
                 }
-                
-                // Agregar contraportada
-                const backCoverDiv = document.createElement('div');
-                backCoverDiv.className = 'hard';
-                backCoverDiv.textContent = 'Contraportada';
-                flipbook.appendChild(backCoverDiv);
 
                 // Actualizar total de páginas
                 document.getElementById('totalPages').textContent = pdf.numPages;
                 
-                // Inicializar turn.js
+                // Inicializar turn.js con configuración responsiva
+                const dimensions = calculateDimensions();
                 $(flipbook).turn({
-                    width: desiredWidth * 2,
-                    height: (desiredWidth * 1.4),
+                    width: dimensions.width,
+                    height: dimensions.height,
                     autoCenter: true,
-                    acceleration: true,
-                    gradients: true,
+                    acceleration: false, // Desactivar aceleración para movimientos más suaves
+                    gradients: !isMobile(),
                     elevation: 50,
-                    pages: pdf.numPages + 2, // +2 para portada y contraportada
+                    pages: pdf.numPages,
+                    display: window.innerWidth < 768 ? 'single' : 'double',
+                    duration: 600, // Reducir duración de la animación
                     when: {
                         turning: function(event, page, view) {
                             document.getElementById('currentPage').textContent = page;
+                            // Prevenir cambios de página mientras se está animando
+                            if ($(this).turn('animating')) {
+                                event.preventDefault();
+                            }
+                        },
+                        turned: function(event, page) {
+                            // Actualizar controles después de la animación
+                            updateControls(page, pdf.numPages);
                         }
                     }
                 });
+
+                // Función para actualizar estados de los controles
+                function updateControls(currentPage, totalPages) {
+                    document.getElementById('first').disabled = currentPage === 1;
+                    document.getElementById('prev').disabled = currentPage === 1;
+                    document.getElementById('next').disabled = currentPage === totalPages;
+                    document.getElementById('last').disabled = currentPage === totalPages;
+                }
+
+                // Manejar cambios de tamaño con debounce
+                let resizeTimer;
+                window.addEventListener('resize', function() {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(function() {
+                        const dimensions = calculateDimensions();
+                        const currentPage = $(flipbook).turn('page');
+                        
+                        $(flipbook).turn('size', 
+                            dimensions.width,
+                            dimensions.height
+                        );
+                        
+                        $(flipbook).turn('display', window.innerWidth < 768 ? 'single' : 'double');
+                        $(flipbook).turn('page', currentPage);
+                    }, 250);
+                });
+
+                // Detectar si es dispositivo móvil
+                function isMobile() {
+                    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                }
 
                 // Ocultar loader
                 document.getElementById('loader').style.display = 'none';
@@ -144,7 +189,7 @@
                 });
                 
                 document.getElementById('last').addEventListener('click', () => {
-                    $(flipbook).turn('page', pdf.numPages + 2);
+                    $(flipbook).turn('page', pdf.numPages);
                 });
                 
                 document.getElementById('prev').addEventListener('click', () => {
@@ -153,24 +198,6 @@
                 
                 document.getElementById('next').addEventListener('click', () => {
                     $(flipbook).turn('next');
-                });
-                
-                document.getElementById('zoomIn').addEventListener('click', () => {
-                    currentScale += 0.2;
-                    $(flipbook).turn('size', 
-                        desiredWidth * 2 * currentScale,
-                        desiredWidth * 1.4 * currentScale
-                    );
-                });
-                
-                document.getElementById('zoomOut').addEventListener('click', () => {
-                    if (currentScale > 0.5) {
-                        currentScale -= 0.2;
-                        $(flipbook).turn('size',
-                            desiredWidth * 2 * currentScale,
-                            desiredWidth * 1.4 * currentScale
-                        );
-                    }
                 });
 
             } catch (error) {

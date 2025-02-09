@@ -2,95 +2,103 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
-const fs = require('fs'); // Cambiado para usar el módulo fs completo
+const fs = require('fs');
 
 const app = express();
-const port = process.env.PORT || 3002;
+const port = process.env.PORT || 3000;
 
-// Asegúrate de crear la carpeta temp si no existe
+// Configurar directorio temporal
 const tempDir = path.join(__dirname, 'temp');
 if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir);
 }
 
-// Middleware para parsear JSON
-app.use(express.json());
+// Configuraciones
 app.use(express.static('public'));
 app.set('view engine', 'ejs');
 
-// Ruta principal que acepta la URL como query parameter
+// Ruta principal
 app.get('/', async (req, res) => {
     try {
         const pdfUrl = req.query.pdfUrl;
+        
         if (!pdfUrl) {
-            return res.status(400).send('URL del PDF no proporcionada');
+            return res.status(400).send('Se requiere una URL de PDF');
         }
 
-        // Validar la URL
+        // Validar URL
         try {
             new URL(pdfUrl);
         } catch (e) {
             return res.status(400).send('URL inválida');
         }
 
-        // Generar nombre único para el archivo
-        const timestamp = Date.now();
-        const tempPdfPath = path.join(tempDir, `pdf_${timestamp}.pdf`);
+        // Generar nombre temporal único
+        const nombreArchivo = `pdf_${Date.now()}.pdf`;
+        const rutaTemporal = path.join(tempDir, nombreArchivo);
 
-        // Descargar el PDF con manejo de errores mejorado
-        try {
-            const response = await axios({
-                url: pdfUrl,
-                method: 'GET',
-                responseType: 'arraybuffer',
-                timeout: 5000, // 5 segundos de timeout
-                validateStatus: status => status === 200
+        // Descargar PDF
+        const respuesta = await axios({
+            url: pdfUrl,
+            method: 'GET',
+            responseType: 'arraybuffer'
+        });
+
+        // Guardar PDF temporalmente
+        await fs.promises.writeFile(rutaTemporal, respuesta.data);
+
+        // Programar eliminación del archivo después de 5 minutos
+        setTimeout(() => {
+            fs.unlink(rutaTemporal, (err) => {
+                if (err) console.error('Error al eliminar archivo temporal:', err);
             });
+        }, 5 * 60 * 1000);
 
-            if (!response.headers['content-type'].includes('application/pdf')) {
-                throw new Error('El recurso no es un PDF válido');
-            }
-
-            await fs.promises.writeFile(tempPdfPath, response.data);
-            
-            // Renderizar la vista
-            res.render('flipbook', { 
-                pdfUrl: `/temp/pdf_${timestamp}.pdf`
-            });
-
-            // Programar limpieza del archivo
-            setTimeout(async () => {
-                try {
-                    if (fs.existsSync(tempPdfPath)) {
-                        await fs.promises.unlink(tempPdfPath);
-                        console.log(`Archivo temporal eliminado: ${tempPdfPath}`);
-                    }
-                } catch (err) {
-                    console.error('Error al eliminar archivo temporal:', err);
-                }
-            }, 5 * 60 * 1000);
-
-        } catch (error) {
-            console.error('Error al descargar el PDF:', error);
-            return res.status(500).send('Error al descargar el PDF');
-        }
+        // Renderizar vista con la URL del archivo temporal
+        res.render('flipbook', { 
+            pdfUrl: `/temp/${nombreArchivo}`
+        });
 
     } catch (error) {
-        console.error('Error general:', error);
-        res.status(500).send('Error al procesar la solicitud del PDF');
+        console.error('Error:', error);
+        res.status(500).send('Error al procesar el PDF');
     }
 });
 
-// Configurar cabeceras de seguridad para archivos temporales
-app.use('/temp', (req, res, next) => {
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    next();
-}, express.static(path.join(__dirname, 'temp')));
+// Servir archivos temporales
+app.use('/temp', express.static(tempDir));
 
-// Agregar esta línea después de los otros middleware
-app.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
+const buscarPuertoDisponible = (puertoInicial) => {
+    return new Promise((resolve, reject) => {
+        const servidor = require('net').createServer();
+        
+        servidor.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                servidor.close();
+                resolve(buscarPuertoDisponible(puertoInicial + 1));
+            } else {
+                reject(err);
+            }
+        });
 
-app.listen(port, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
-});
+        servidor.listen(puertoInicial, () => {
+            servidor.close();
+            resolve(puertoInicial);
+        });
+    });
+};
+
+async function iniciarServidor() {
+    try {
+        const puertoDisponible = await buscarPuertoDisponible(port);
+        app.listen(puertoDisponible, () => {
+            console.log(`🚀 Servidor corriendo en http://localhost:${puertoDisponible}`);
+            console.log(`💡 Para usar, visita: http://localhost:${puertoDisponible}/?pdfUrl=URL_DEL_PDF`);
+        });
+    } catch (error) {
+        console.error('Error al iniciar el servidor:', error);
+        process.exit(1);
+    }
+}
+
+iniciarServidor();

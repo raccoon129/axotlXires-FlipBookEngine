@@ -1,5 +1,5 @@
 {
-  "name": "axotlxires-flipbookengine",
+  "name": "axotlxires-flipbook-engine",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
@@ -9,13 +9,16 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Motor para visualizar PDFs como flipbook",
   "dependencies": {
-    "axios": "^1.7.9",
-    "ejs": "^3.1.10",
-    "express": "^4.21.2",
-    "nodemon": "^3.0.2",
+    "express": "^4.17.1",
+    "ejs": "^3.1.6",
+    "axios": "^0.24.0",
     "jquery": "^3.6.0",
-    "turn.js": "^1.0.5"
+    "turn.js": "^4.1.0",
+    "pdfjs-dist": "^2.12.313"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
   }
 }
