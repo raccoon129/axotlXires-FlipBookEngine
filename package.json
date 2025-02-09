@@ -1,0 +1,21 @@
+{
+  "name": "axotlxires-flipbookengine",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "nodemon": "^3.0.2",
+    "jquery": "^3.6.0",
+    "turn.js": "^1.0.5"
+  }
+}

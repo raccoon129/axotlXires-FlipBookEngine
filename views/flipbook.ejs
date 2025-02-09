@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PDF Flipbook</title>
+    <link rel="stylesheet" href="/css/flipbook.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/blasten/turn.js/turn.min.js"></script>
+    
+    <!-- Agregar este script para verificar la carga -->
+    <script>
+        window.addEventListener('load', function() {
+            if (typeof $.fn.turn === 'undefined') {
+                console.error('turn.js no se cargó correctamente');
+                // Intentar cargar turn.js de forma alternativa
+                var script = document.createElement('script');
+                script.src = 'https://raw.githack.com/blasten/turn.js/master/turn.min.js';
+                script.onload = function() {
+                    console.log('turn.js cargado exitosamente desde fuente alternativa');
+                    if (typeof renderPDF === 'function') {
+                        renderPDF();
+                    }
+                };
+                document.head.appendChild(script);
+            } else {
+                console.log('turn.js cargado correctamente');
+            }
+        });
+    </script>
+</head>
+<body>
+    <div class="flipbook-container">
+        <div id="loader" class="loader">
+            <div class="loader-spinner"></div>
+            <p>Cargando PDF...</p>
+        </div>
+        
+        <div id="flipbook"></div>
+        
+        <div id="controls">
+            <div class="control-bar">
+                <button class="control-button" id="first">
+                    <i class="fas fa-step-backward"></i>
+                </button>
+                <button class="control-button" id="prev">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="page-number">
+                    Página <span id="currentPage">1</span> de <span id="totalPages">0</span>
+                </span>
+                <button class="control-button" id="next">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+                <button class="control-button" id="last">
+                    <i class="fas fa-step-forward"></i>
+                </button>
+                <button class="control-button" id="zoomIn">
+                    <i class="fas fa-search-plus"></i>
+                </button>
+                <button class="control-button" id="zoomOut">
+                    <i class="fas fa-search-minus"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+        const pdfUrl = '<%= pdfUrl %>';
+        let currentScale = 1.0;
+        const desiredWidth = 800; // Ancho base del flipbook
+
+        async function renderPDF() {
+            try {
+                const loadingTask = pdfjsLib.getDocument(pdfUrl);
+                const pdf = await loadingTask.promise;
+                
+                const flipbook = document.getElementById('flipbook');
+                flipbook.innerHTML = '';
+                
+                // Agregar portada
+                const coverDiv = document.createElement('div');
+                coverDiv.className = 'hard';
+                coverDiv.textContent = 'Portada';
+                flipbook.appendChild(coverDiv);
+                
+                // Renderizar páginas
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    
+                    const viewport = page.getViewport({ scale: 1.0 });
+                    const scale = desiredWidth / viewport.width;
+                    const scaledViewport = page.getViewport({ scale });
+                    
+                    canvas.height = scaledViewport.height;
+                    canvas.width = scaledViewport.width;
+                    
+                    await page.render({
+                        canvasContext: context,
+                        viewport: scaledViewport
+                    }).promise;
+                    
+                    const div = document.createElement('div');
+                    div.className = 'page';
+                    div.appendChild(canvas);
+                    flipbook.appendChild(div);
+                }
+                
+                // Agregar contraportada
+                const backCoverDiv = document.createElement('div');
+                backCoverDiv.className = 'hard';
+                backCoverDiv.textContent = 'Contraportada';
+                flipbook.appendChild(backCoverDiv);
+
+                // Actualizar total de páginas
+                document.getElementById('totalPages').textContent = pdf.numPages;
+                
+                // Inicializar turn.js
+                $(flipbook).turn({
+                    width: desiredWidth * 2,
+                    height: (desiredWidth * 1.4),
+                    autoCenter: true,
+                    acceleration: true,
+                    gradients: true,
+                    elevation: 50,
+                    pages: pdf.numPages + 2, // +2 para portada y contraportada
+                    when: {
+                        turning: function(event, page, view) {
+                            document.getElementById('currentPage').textContent = page;
+                        }
+                    }
+                });
+
+                // Ocultar loader
+                document.getElementById('loader').style.display = 'none';
+                
+                // Configurar controles
+                document.getElementById('first').addEventListener('click', () => {
+                    $(flipbook).turn('page', 1);
+                });
+                
+                document.getElementById('last').addEventListener('click', () => {
+                    $(flipbook).turn('page', pdf.numPages + 2);
+                });
+                
+                document.getElementById('prev').addEventListener('click', () => {
+                    $(flipbook).turn('previous');
+                });
+                
+                document.getElementById('next').addEventListener('click', () => {
+                    $(flipbook).turn('next');
+                });
+                
+                document.getElementById('zoomIn').addEventListener('click', () => {
+                    currentScale += 0.2;
+                    $(flipbook).turn('size', 
+                        desiredWidth * 2 * currentScale,
+                        desiredWidth * 1.4 * currentScale
+                    );
+                });
+                
+                document.getElementById('zoomOut').addEventListener('click', () => {
+                    if (currentScale > 0.5) {
+                        currentScale -= 0.2;
+                        $(flipbook).turn('size',
+                            desiredWidth * 2 * currentScale,
+                            desiredWidth * 1.4 * currentScale
+                        );
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error al renderizar el PDF:', error);
+                alert('Error al cargar el PDF. Por favor, intente de nuevo.');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Verificar dependencias
+            const dependencies = {
+                'jQuery': typeof $ !== 'undefined',
+                'turn.js': typeof $.fn.turn !== 'undefined',
+                'pdf.js': typeof pdfjsLib !== 'undefined'
+            };
+            
+            console.log('Estado de dependencias:', dependencies);
+            
+            // Verificar si falta alguna dependencia
+            const missingDeps = Object.entries(dependencies)
+                .filter(([, loaded]) => !loaded)
+                .map(([name]) => name);
+            
+            if (missingDeps.length > 0) {
+                console.error('Dependencias faltantes:', missingDeps);
+                alert(`Error: Faltan las siguientes dependencias: ${missingDeps.join(', ')}`);
+                return;
+            }
+
+            renderPDF();
+
+            // Agregar después de cargar todas las dependencias
+            console.log('jQuery version:', $.fn.jquery);
+            console.log('turn.js loaded:', typeof $.fn.turn !== 'undefined');
+            console.log('pdf.js version:', pdfjsLib.version);
+        });
+    </script>
+</body>
+</html>
